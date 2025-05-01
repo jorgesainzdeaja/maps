@@ -209,6 +209,7 @@ DEM_mat %>%
 
 render_camera(fov = 60, theta = 1, zoom = 0.6, phi = 30)
 
+# adding clouds, if you prefer not to add lovely fluffly clouds, skip this step.
 render_clouds(DEM_mat,
               zscale = 4,
               start_altitude = 200,
@@ -218,4 +219,5 @@ render_clouds(DEM_mat,
               cloud_cover = 0.6,
               scale_y = 2)
 
+# save image
 render_snapshot("after_camera.png")
