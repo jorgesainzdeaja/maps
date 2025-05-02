@@ -1,3 +1,4 @@
+
 # required libraries
 library(sf)
 library(raster)
@@ -6,9 +7,10 @@ library(ows4R)
 library(osdatahub)
 library(geojsonsf)
 library(grDevices)
+library(magick)
 
 # get SW catchment data or Boundary
-## You can avoid this section by providing any sf POLYGON in EPSG::27700 e.g. below
+## You can avoid this section by providing any sf POLYGON in EPSG::27700, e.g. below
 ### SW_C <- sf::st_transform(sf::st_read("your POLYGON PATH HERE"), 27700)
 SW <- sf::st_transform(sf::st_read("https://environment.data.gov.uk/catchment-planning/WaterBody/GB106039017700.geojson"), 27700)
 SW_C <- sf::st_as_sf(SW[sf::st_geometry_type(SW) == "POLYGON", ])
@@ -45,11 +47,11 @@ Zoomstack <- function(theme, bbox) {
   
 }
 
-## you need to have a KEY from ordnance survey (it is free!)
-### you can always manually download the layers from ordnance survey website, but you will loose part of the automation process
-osdatahub::set_os_key("KEY") # <- ADD YOUR KEY HERE  
+## you need to have a KEY from Ordnance Survey (it is free!)
+### you can always manually download the layers from Ordnance Survey website, but you will loose part of the automation process
+osdatahub::set_os_key("YOUR KEY") # <- ADD YOUR KEY HERE  
 
-### stack layers required to generate the map (there are a few more, please check ordnance survey API documentation for full list -- https://www.ordnancesurvey.co.uk/products/os-maps-api)
+### stack layers required to generate the map (there are a few more, please check Ordnance Survey API documentation for full list -- https://www.ordnancesurvey.co.uk/products/os-maps-api)
 zoomstack_list <- c("Zoomstack_Greenspace", "Zoomstack_NationalParks","Zoomstack_Rail",
                     "Zoomstack_RoadsLocal","Zoomstack_RoadsNational","Zoomstack_RoadsRegional","Zoomstack_Sites",
                     "Zoomstack_Surfacewater","Zoomstack_Waterlines","Zoomstack_Woodland", "Zoomstack_LocalBuildings")
@@ -57,12 +59,12 @@ zoomstack_list <- c("Zoomstack_Greenspace", "Zoomstack_NationalParks","Zoomstack
 #### defining the data extend based on the provided boundary -- SW_C
 bb <- sf::st_bbox(SW_C)
 
-# apply the ordnance survey data function to the list of layers desired
+# Apply the Ordnance Survey data function to the list of layers desired
 for (i in seq_along(zoomstack_list)) {
   assign(zoomstack_list[i], Zoomstack(zoomstack_list[i], bb))
 }
 
-## cropping all ordnance survey layers with the provided boundary
+## Cropping all Ordnance Survey layers with the provided boundary
 for (i in seq_along(zoomstack_list)) {
   assign(zoomstack_list[i], sf::st_intersection(get(zoomstack_list[i]), SW_C))
 }
@@ -73,7 +75,7 @@ dsm_cov <- dsm_wcs$capabilities$findCoverageSummaryById("9ba4d5ac-d596-445a-9056
 dsm <- dsm_cov$getCoverage(bbox = ows4R::OWSUtils$toBBOX(bb[1],bb[3],bb[2],bb[4]))
 DEM_DSM <- raster::raster(dsm)
 
-# reducing the size of the raster, for areas too large this could crash your computer so be mindful, the larger the "fact" variable the lower the detail on the raster 
+# reducing the size of the raster, for areas too large, this could crash your computer, so be mindful, the larger the "fact" variable, the lower the detail on the raster 
 DEM_DSM <- raster::aggregate(DEM_DSM, fact = 5, fun = mean, na.rm = TRUE)
 
 ## Cropping the raster with the defined boundary
@@ -87,7 +89,7 @@ DEM_mat[is.na(DEM_mat)] <- 0       # Remove NAs
 DEM_mat[!is.finite(DEM_mat)] <- 0  # Remove Inf/-Inf
 storage.mode(DEM_mat) <- "double"
 
-## adding overlay layers, each Zoomstack layer from the ordnance survey daya is assigned a color and a type of overlay
+## adding overlay layers, each Zoomstack layer from the Ordnance Survey data is assigned a colour and a type of overlay
 grass_overlay <- Zoomstack_Greenspace %>%
   rayshader::generate_line_overlay(extent = raster::extent(DEM_DSM),
                                    heightmap = DEM_mat,
@@ -163,6 +165,7 @@ Bound_overlay <- sf::st_cast(SW_C, "MULTILINESTRING") %>%
   )
 
 ######### GENRATING A 2D MAP ###########
+
 DEM_mat %>%
   #sphere_shade(texture = "imhof1") %>%
   rayshader::height_shade(
@@ -183,7 +186,47 @@ DEM_mat %>%
   rayshader::add_overlay(overlay = Water_overlay, alphalayer = 0.9) %>%
   rayshader::add_overlay(overlay = Building_overlay, alphalayer = 0.8) %>%
   rayshader::add_overlay(overlay = Bound_overlay, alphalayer = 1) %>%
-  plot_map()
+  plot_3d(DEM_mat, zscale = 10, fov = 40, theta = 0.1, zoom = 0.55, phi = 89, windowsize = c(2000, 1600))
+
+render_camera(fov = 60, theta = 0, zoom = 0.55, phi = 89)
+render_snapshot("after_map.png")
+
+outfile <- glue::glue("River_Wey_map.png")
+
+render_highquality(
+  filename = outfile,
+  interactive = F,
+  lightdirection = 55, #Degree
+  lightaltitude = c(30, 80),
+  lightcolor = c("white", "white"),  # Set both lights to white
+  lightintensity = c(600, 100),
+  width = 2000,
+  height = 1080,
+  samples = 500
+  #samples = 2
+)
+
+WR_map <- magick::image_read("River_Wey_map.png")
+
+WR_map %>%
+  magick::image_annotate("River Wey Cathment Area",
+                         gravity = "north",
+                         location = "0+50",
+                         color = "#aa9966",
+                         size = 60,
+                         font = "Arial",
+                         weight = 700,
+                         # degrees = 0,
+  ) %>%
+  magick::image_annotate("Visualization by: Jorge Sainz de Aja Curbelo with Rayshader\nData: DEFRA + Ordnance Survey",
+                         gravity = "south",
+                         location = "0+20",
+                         color = "black",
+                         font = "Arial",  # Corrected font name
+                         size = 20,
+                         # degrees = 0,
+  ) %>%
+  magick::image_write("Annotated_River_Wey_map.png", format = "png", quality = 100)
 
 ######### GENRATING A 3D MAP ###########
 DEM_mat %>%
@@ -205,19 +248,59 @@ DEM_mat %>%
   rayshader::add_overlay(overlay = Water_overlay, alphalayer = 0.9) %>%
   rayshader::add_overlay(overlay = Building_overlay, alphalayer = 0.8) %>%
   rayshader::add_overlay(overlay = Bound_overlay, alphalayer = 1) %>%
-  plot_3d(DEM_mat, zscale = 10, fov = 40, theta = 1, zoom = 0.4, phi = 30, windowsize = c(2000, 1500))
+  plot_3d(DEM_mat, zscale = 10, fov = 40, theta = 1, zoom = 0.4, phi = 30, windowsize = c(2000, 1000))
 
-render_camera(fov = 60, theta = 1, zoom = 0.6, phi = 30)
+render_camera(fov = 60, theta = 1, zoom = 0.5, phi = 30)
 
-# adding clouds, if you prefer not to add lovely fluffly clouds, skip this step.
+# adding clouds, if you prefer not to add lovely fluffy clouds, skip this step.
 render_clouds(DEM_mat,
               zscale = 4,
               start_altitude = 200,
               end_altitude = 400,
               attenuation_coef = 2,
               clear_clouds = T,
-              cloud_cover = 0.6,
-              scale_y = 2)
+              cloud_cover = 0.4,
+              scale_y = 2,
+              seed = 3)
 
 # save image
 render_snapshot("after_camera.png")
+
+## generating a high-quality render
+outfile <- glue::glue("River_Wey_clouds.png") # render file name
+
+render_highquality(
+  filename = outfile,
+  interactive = F,
+  lightdirection = 55, #Degree
+  lightaltitude = c(30, 80),
+  lightcolor = c("white", "white"),  # Set both lights to white
+  lightintensity = c(600, 100),
+  width = 2000,
+  height = 1080,
+  samples = 500
+  #samples = 2
+) # once executed, the render will be saved automatically
+
+### annotating your render
+WR_raster <- magick::image_read("River_Wey_clouds.png")# loading the rendered image from previous step
+WR_raster %>%
+  # adding a tile
+  magick::image_annotate("River Wey Cathment Area",
+                 gravity = "northeast",
+                 location = "+50+50",
+                 color = "#aa9966",
+                 size = 60,
+                 font = "Arial",
+                 weight = 700,
+  ) %>%
+  # adding a subtitle
+  magick::image_annotate("Visualization by: Jorge Sainz de Aja Curbelo with Rayshader\nData: DEFRA + Ordnance Survey",
+                 gravity = "southwest",
+                 location = "+20+20",
+                 color = "black",
+                 font = "Arial",
+                 size = 25
+  ) %>%
+  # saving the annotated image
+  magick::image_write("Annotated_River_Wey_clouds.png", format = "png", quality = 100)
