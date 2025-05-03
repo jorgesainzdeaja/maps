@@ -1,3 +1,9 @@
+### Code references:
+#### https://cheartography.blogspot.com/2011/06/vintage-colour-palette-for-maps.html
+#### https://medium.com/@niloy.swe/how-to-create-a-3d-population-density-map-in-r-33dfaf7a71d7
+#### https://www.rayshader.com/
+#### https://gist.github.com/norwegianblueparrot/b9d5d48f2d591d78a14320bf17459cc5
+
 ## required libraries
 
 library(geojsonsf)
